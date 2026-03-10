@@ -1,0 +1,10 @@
+# Security
+.env
+
+# Xtrobe specific ignores
+output/
+skyfield_cache/
+
+# Standard Python ignores
+__pycache__/
+*.pyc
