@@ -1,0 +1,126 @@
+name: Nightly Calendar Update
+
+# ── Triggers ──────────────────────────────────────────────────
+on:
+  schedule:
+    - cron: "0 1 * * *"       # 01:00 UTC every night  → daily update
+    - cron: "0 2 1 1 *"       # 02:00 UTC on Jan 1     → full static rebuild
+  workflow_dispatch:           # manual trigger from GitHub UI
+    inputs:
+      run_type:
+        description: "What to run"
+        required: true
+        default: "daily"
+        type: choice
+        options: [daily, static, both]
+
+# ── Permissions ───────────────────────────────────────────────
+permissions:
+  contents: write              # needed to push to data branch
+
+jobs:
+  update:
+    name: Generate & Publish Calendar Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 60        # planetary scan can take ~5 min; asteroid fetch ~3 min
+
+    steps:
+      # ── 1. Checkout main (script lives here) ─────────────────
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      # ── 2. Python setup ──────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. Pip cache (speeds up installs after first run) ────
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      # ── 4. Skyfield ephemeris cache ───────────────────────────
+      #    de421.bsp (~17 MB) is downloaded only once ever.
+      #    The cache key is static ("skyfield-de421") so it never
+      #    expires and never re-downloads on nightly runs.
+      - name: Cache Skyfield ephemeris (de421.bsp)
+        uses: actions/cache@v4
+        with:
+          path: skyfield_cache
+          key: skyfield-de421
+
+      # ── 5. Install dependencies ───────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install skyfield requests pytz numpy python-dotenv
+
+      # ── 6. Determine run type ─────────────────────────────────
+      #    • Jan 1 cron     → static (full year rebuild)
+      #    • All other crons → daily (asteroids + comets)
+      #    • workflow_dispatch → whatever the user selected
+      - name: Determine run type
+        id: run_type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "type=${{ github.event.inputs.run_type }}" >> $GITHUB_OUTPUT
+          elif [ "$(date +%m%d)" = "0101" ]; then
+            echo "type=static" >> $GITHUB_OUTPUT
+          else
+            echo "type=daily" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 7. Run the generator ──────────────────────────────────
+      - name: Run calendar generator
+        env:
+          NASA_API_KEY_1: ${{ secrets.NASA_API_KEY_1 }}
+          NASA_API_KEY_2: ${{ secrets.NASA_API_KEY_2 }}
+        run: |
+          YEAR=$(date +%Y)
+          RUN_TYPE="${{ steps.run_type.outputs.type }}"
+          echo "Run type: $RUN_TYPE  |  Year: $YEAR"
+          python generate_events_v2.py --type "$RUN_TYPE" --year "$YEAR"
+
+      # ── 8. Verify outputs exist ───────────────────────────────
+      - name: Verify output files
+        run: |
+          echo "=== Output directory contents ==="
+          ls -lh output/ || echo "No output directory found!"
+          # Fail the job if daily_update.json is missing on a daily run
+          if [ "${{ steps.run_type.outputs.type }}" != "static" ]; then
+            test -f output/daily_update.json || (echo "daily_update.json missing!" && exit 1)
+          fi
+
+      # ── 9. Push output/ to data branch ───────────────────────
+      #    The data branch contains ONLY the generated JSON files.
+      #    Your frontend can fetch them raw from GitHub or via CDN.
+      - name: Publish output to data branch
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Checkout (or create) the data branch without history
+          git fetch origin data 2>/dev/null || true
+          git checkout -B data origin/data 2>/dev/null || git checkout --orphan data
+
+          # Replace only the output/ folder on the data branch
+          git rm -rf output/ 2>/dev/null || true
+          git checkout main -- output/
+
+          # Stage and commit
+          git add output/
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes in output — skipping commit."
+          else
+            git commit -m "chore: calendar update $(date -u +%Y-%m-%dT%H:%M:%SZ) [run=${{ steps.run_type.outputs.type }}]"
+            git push origin data --force
+            echo "✅ Pushed to data branch."
+          fi
