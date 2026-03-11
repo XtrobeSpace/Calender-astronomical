@@ -45,6 +45,8 @@ from skyfield import almanac
 from skyfield.framelib import ecliptic_frame
 from skyfield.data import mpc as sk_mpc                               # comet orbital elements
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN  # for comet_orbit()
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # ── Env / secrets ─────────────────────────────────────────────
 try:
@@ -1185,29 +1187,43 @@ def fetch_all_asteroids_year(year: int) -> list[dict]:
 # DAILY — COMETS (MPC orbital elements, correct Skyfield API)
 # ─────────────────────────────────────────────────────────────
 
+
+
 def fetch_comets_with_positions(ts, eph) -> list[dict]:
     """
-    Downloads MPC comet orbital elements (no key needed), computes real
-    RA/Dec for each comet using Skyfield's mpc.comet_orbit() API.
-    Filters out objects beyond 5 AU (too faint to matter).
+    Downloads MPC comet orbital elements using an enterprise-grade retry
+    session to bypass academic firewalls and intermittent timeouts.
     """
     events: list[dict] = []
     mpc_url = "https://www.minorplanetcenter.net/iau/MPCORB/CometEls.txt"
+    
+    # 1. Setup a persistent session with Exponential Backoff
+    session = requests.Session()
+    retry = Retry(
+        total=5,           # Try up to 5 times
+        read=5,            # Retry on read timeouts
+        connect=5,         # Retry on connection drops
+        backoff_factor=2,  # Wait 2s, 4s, 8s, 16s between attempts
+        status_forcelist=[403, 429, 500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
 
     try:
-        resp = requests.get(mpc_url, timeout=30)
+        log.info("  Fetching comets from MPC (with exponential backoff protection)...")
+        # Extended base timeout to 45 seconds for slow servers
+        resp = session.get(mpc_url, headers=headers, timeout=45)
         resp.raise_for_status()
-        # Skyfield needs a raw byte stream, not string lines
+        
         f = io.BytesIO(resp.content)
-    except Exception as exc:
-        log.warning(f"MPC comet fetch failed: {exc}")
-        return events
-
-    try:
-        # Correct attribute name for parsing the MPC dataframe
         comets_df = sk_mpc.load_comets_dataframe(f)
     except Exception as exc:
-        log.warning(f"MPC parse failed: {exc}")
+        log.error(f"  All MPC fetch attempts failed or timed out: {exc}")
         return events
 
     now_utc = datetime.now(timezone.utc)
@@ -1217,8 +1233,7 @@ def fetch_comets_with_positions(ts, eph) -> list[dict]:
 
     for _, row in comets_df.iterrows():
         try:
-            # Correct Skyfield API: comet position = sun + orbit
-            comet      = sun + sk_mpc.comet_orbit(row, ts, GM_SUN)
+            comet       = sun + sk_mpc.comet_orbit(row, ts, GM_SUN)
             astrometric = earth.at(t_now).observe(comet)
             ra, dec, dist = astrometric.radec()
 
@@ -1244,7 +1259,7 @@ def fetch_comets_with_positions(ts, eph) -> list[dict]:
                                         f"dist {round(float(dist.au),2)} AU."),
             })
         except Exception:
-            continue  # Skip malformed elements silently
+            continue
 
     log.info(f"  Comets with real positions: {len(events)}")
     return events
