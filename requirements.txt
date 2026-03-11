@@ -3,3 +3,4 @@ requests>=2.31
 pytz>=2024.1
 numpy>=1.26
 python-dotenv>=1.0
+pandas>=2.0.0
