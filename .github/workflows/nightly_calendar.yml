@@ -1,44 +1,42 @@
 name: Nightly Calendar Update
 
-# ── Triggers ──────────────────────────────────────────────────
 on:
   schedule:
-    - cron: "0 1 * * *"       # 01:00 UTC every night  → daily update
-    - cron: "0 2 1 1 *"       # 02:00 UTC on Jan 1     → full static rebuild
-  workflow_dispatch:           # manual trigger from GitHub UI
+    - cron: "0 1 * * *"
+    - cron: "0 2 1 1 *"
+  workflow_dispatch:
     inputs:
       run_type:
         description: "What to run"
         required: true
         default: "daily"
         type: choice
-        options: [daily, static, both]
+        options: 
+          - daily
+          - static
+          - both
 
-# ── Permissions ───────────────────────────────────────────────
 permissions:
-  contents: write              # needed to push to data branch
+  contents: write
 
 jobs:
   update:
     name: Generate & Publish Calendar Data
     runs-on: ubuntu-latest
-    timeout-minutes: 60        
+    timeout-minutes: 60
 
     steps:
-      # ── 1. Checkout main (script lives here) ─────────────────
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 1
 
-      # ── 2. Python setup ──────────────────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ── 3. Pip cache (speeds up installs after first run) ────
       - name: Cache pip packages
         uses: actions/cache@v4
         with:
@@ -46,33 +44,28 @@ jobs:
           key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: pip-${{ runner.os }}-
 
-      # ── 4. Skyfield ephemeris cache ───────────────────────────
       - name: Cache Skyfield ephemeris (de421.bsp)
         uses: actions/cache@v4
         with:
           path: skyfield_cache
           key: skyfield-de421
 
-      # ── 5. Install dependencies ───────────────────────────────
-      # Now it explicitly installs from your requirements.txt!
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ── 6. Determine run type ─────────────────────────────────
       - name: Determine run type
         id: run_type
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "type=${{ github.event.inputs.run_type }}" >> $GITHUB_OUTPUT
+            echo "type=${{ inputs.run_type }}" >> $GITHUB_OUTPUT
           elif [ "$(date +%m%d)" = "0101" ]; then
             echo "type=static" >> $GITHUB_OUTPUT
           else
             echo "type=daily" >> $GITHUB_OUTPUT
           fi
 
-      # ── 7. Run the generator ──────────────────────────────────
       - name: Run calendar generator
         env:
           NASA_API_KEY_1: ${{ secrets.NASA_API_KEY_1 }}
@@ -83,7 +76,6 @@ jobs:
           echo "Run type: $RUN_TYPE  |  Year: $YEAR"
           python generate_events_v2.py --type "$RUN_TYPE" --year "$YEAR"
 
-      # ── 8. Verify outputs exist ───────────────────────────────
       - name: Verify output files
         run: |
           echo "=== Output directory contents ==="
@@ -92,25 +84,26 @@ jobs:
             test -f output/daily_update.json || (echo "daily_update.json missing!" && exit 1)
           fi
 
-     # ── 9. Push output/ to data branch ───────────────────────
       - name: Publish output to data branch
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # 1. Switch to a completely fresh, empty 'data' branch
+          
+          # 1. Back up the generated files to a safe, temporary directory
+          mkdir -p /tmp/data_output
+          cp -a output/. /tmp/data_output/
+          
+          # 2. Switch to a completely empty 'data' branch
           git checkout --orphan data
-
-          # 2. Clear out the old tracked files from the staging area
+          
+          # 3. Nuke everything from the old branch (including .gitignore)
           git rm -rf . || true
-
-          # 3. Force-add the newly generated output folder (bypasses .gitignore)
-          git add -f output/
-
-          # 4. Commit and push
-          git commit -m "chore: calendar update $(date -u +%Y-%m-%dT%H:%M:%SZ) [run=${{ steps.run_type.outputs.type }}]"
+          git clean -fdx || true
+          
+          # 4. Bring our fresh JSON files back
+          cp -a /tmp/data_output/. .
+          
+          # 5. Commit and force-push
+          git add .
+          git commit -m "chore: calendar update $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "No changes to commit"
           git push origin data --force
-          echo "✅ Pushed to data branch."
-            git push origin data --force
-            echo "✅ Pushed to data branch."
-          fi
