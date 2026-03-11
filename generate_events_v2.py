@@ -30,6 +30,7 @@ import os
 import sys
 import argparse
 import time
+import io
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -410,7 +411,7 @@ MESSIER_CATALOG = [
     ("M34", "",                     "OC",   2.703,  42.78, 5.5, 35.0),
     ("M35", "",                     "OC",   6.147,  24.33, 5.3, 28.0),
     ("M36", "",                     "OC",   5.603,  34.13, 6.0, 12.0),
-    ("M37", "",                     "OC",   5.873,  32.55, 5.6, 24.0),
+    ("M37", "",                     "OC",   5.873,  32.55, 5.6, 24.0 ),
     ("M38", "",                     "OC",   5.480,  35.85, 6.4, 21.0),
     ("M39", "",                     "OC",  21.533,  48.43, 4.6, 32.0),
     ("M40", "Winnecke 4",           "Db",  12.370,  58.08, 8.4,  1.0),
@@ -593,11 +594,12 @@ def visibility_record(ts, eph, utc_dt: datetime, ra_h, dec_d,
     except Exception:
         s_alt = 0.0
 
-    dark    = s_alt <= SUN_NAUTICAL
+    # Explicitly cast to native Python floats and bools for JSON serialization
+    dark    = bool(s_alt <= SUN_NAUTICAL)
     visible = bool(alt >= min_a and dark)
 
-    rec = {"v": visible, "alt": alt, "lt": local_hhmm(utc_dt, tz),
-           "dk": dark, "s_alt": s_alt}
+    rec = {"v": visible, "alt": float(alt), "lt": local_hhmm(utc_dt, tz),
+           "dk": dark, "s_alt": float(s_alt)}
 
     if ev_cat == "meteor" and alt > 0:
         rec["zhr_f"] = round(math.sin(math.radians(max(alt, 0))), 2)
@@ -1026,7 +1028,7 @@ def gen_algol_minima(year: int) -> list[dict]:
     for n in range(n0, n1 + 1):
         jd     = ref_jd + n * period
         ts_sec = (jd - 2440587.5) * 86400
-        utc_dt = datetime.utcfromtimestamp(ts_sec)
+        utc_dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
         if utc_dt.year != year:
             continue
         events.append({
@@ -1147,7 +1149,7 @@ def fetch_asteroid_week(start: str, end: str) -> list[dict]:
                 "dec_d":       None,
                 "distance_ld": round(dist_ld, 2),
                 "diameter_m":  round(avg_d, 0),
-                "hazardous":   neo.get("is_potentially_hazardous_asteroid", False),
+                "hazardous":   bool(neo.get("is_potentially_hazardous_asteroid", False)),
                 "global_event":True,
                 "description": (f"{neo['name']} passes Earth at {round(dist_ld,2)} lunar distances "
                                 f"({round(dist_ld*384400,0):,.0f} km). "
@@ -1195,18 +1197,20 @@ def fetch_comets_with_positions(ts, eph) -> list[dict]:
     try:
         resp = requests.get(mpc_url, timeout=30)
         resp.raise_for_status()
-        lines = resp.text.splitlines()
+        # Skyfield needs a raw byte stream, not string lines
+        f = io.BytesIO(resp.content)
     except Exception as exc:
         log.warning(f"MPC comet fetch failed: {exc}")
         return events
 
     try:
-        comets_df = sk_mpc.load_mpc_comets(lines)
+        # Correct attribute name for parsing the MPC dataframe
+        comets_df = sk_mpc.load_comets_dataframe(f)
     except Exception as exc:
         log.warning(f"MPC parse failed: {exc}")
         return events
 
-    now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+    now_utc = datetime.now(timezone.utc)
     t_now   = ts.from_datetime(now_utc)
     earth   = eph["earth"]
     sun     = eph["sun"]
@@ -1324,7 +1328,7 @@ def build_static(ts, eph, year: int) -> list[dict]:
 
     doc = {
         "schema":    "xtrobe-2.1",
-        "generated": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "year":      year,
         "count":     len(all_events),
         "events":    all_events,
@@ -1357,7 +1361,7 @@ def build_visibility_files(ts, eph, events: list[dict],
         vis = compute_visibility(ts, eph, events, country_filter=[country])
         doc = {
             "schema":    "xtrobe-2.1",
-            "generated": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "country":   country,
             "locations": {c: LOCATIONS[c] for c in codes},
             "visibility":vis,
@@ -1384,8 +1388,8 @@ def build_daily(ts, eph, year: int) -> None:
 
     doc = {
         "schema":    "xtrobe-2.1",
-        "generated": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "date":      datetime.utcnow().strftime("%Y-%m-%d"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "date":      datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "events":    daily_events,
         "visibility":vis,
     }
@@ -1405,7 +1409,7 @@ def main() -> None:
     )
     p.add_argument("--type",    choices=["static", "daily", "both"], default="both",
                    help="What to generate (default: both)")
-    p.add_argument("--year",    type=int, default=datetime.utcnow().year,
+    p.add_argument("--year",    type=int, default=datetime.now(timezone.utc).year,
                    help="Year to generate (default: current year)")
     p.add_argument("--country", default=None,
                    help="Limit visibility output to one country code, e.g. IN")
