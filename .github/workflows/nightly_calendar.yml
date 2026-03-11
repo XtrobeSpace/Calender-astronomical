@@ -92,23 +92,25 @@ jobs:
             test -f output/daily_update.json || (echo "daily_update.json missing!" && exit 1)
           fi
 
-      # ── 9. Push output/ to data branch ───────────────────────
+     # ── 9. Push output/ to data branch ───────────────────────
       - name: Publish output to data branch
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin data 2>/dev/null || true
-          git checkout -B data origin/data 2>/dev/null || git checkout --orphan data
+          # 1. Switch to a completely fresh, empty 'data' branch
+          git checkout --orphan data
 
-          git rm -rf output/ 2>/dev/null || true
-          git checkout main -- output/
+          # 2. Clear out the old tracked files from the staging area
+          git rm -rf . || true
 
-          git add output/
-          if git diff --staged --quiet; then
-            echo "No changes in output — skipping commit."
-          else
-            git commit -m "chore: calendar update $(date -u +%Y-%m-%dT%H:%M:%SZ) [run=${{ steps.run_type.outputs.type }}]"
+          # 3. Force-add the newly generated output folder (bypasses .gitignore)
+          git add -f output/
+
+          # 4. Commit and push
+          git commit -m "chore: calendar update $(date -u +%Y-%m-%dT%H:%M:%SZ) [run=${{ steps.run_type.outputs.type }}]"
+          git push origin data --force
+          echo "✅ Pushed to data branch."
             git push origin data --force
             echo "✅ Pushed to data branch."
           fi
