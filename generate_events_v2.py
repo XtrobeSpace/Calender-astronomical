@@ -343,6 +343,45 @@ LOCATIONS = {
     "CA-SK":{"name":"Saskatchewan",             "lat": 54.00,"lon":-106.11,"tz":"America/Regina","country":"CA"},
     "CA-YT":{"name":"Yukon",                    "lat": 63.00,"lon":-136.00,"tz":"America/Whitehorse","country":"CA"},
 
+    # ── INDONESIA (Massive SE Asia Population) ──────────────────
+    "ID-JK": {"name": "Jakarta (Java)",     "lat": -6.20, "lon": 106.81, "tz": "Asia/Jakarta", "country": "ID"},
+    "ID-SU": {"name": "Surabaya (East)",    "lat": -7.25, "lon": 112.75, "tz": "Asia/Jakarta", "country": "ID"},
+    "ID-MD": {"name": "Medan (Sumatra)",    "lat":  3.59, "lon":  98.67, "tz": "Asia/Jakarta", "country": "ID"},
+
+    # ── SINGAPORE (High-Tech Hub) ───────────────────────────────
+    # Note: City-state, so one coordinate covers the entire country
+    "SG-SG": {"name": "Singapore",          "lat":  1.35, "lon": 103.81, "tz": "Asia/Singapore", "country": "SG"},
+
+    # ── FRANCE (ESA Core Member) ────────────────────────────────
+    "FR-PA": {"name": "Paris (North)",      "lat": 48.85, "lon":   2.35, "tz": "Europe/Paris", "country": "FR"},
+    "FR-MA": {"name": "Marseille (South)",  "lat": 43.29, "lon":   5.36, "tz": "Europe/Paris", "country": "FR"},
+    "FR-LY": {"name": "Lyon (Central)",     "lat": 45.76, "lon":   4.83, "tz": "Europe/Paris", "country": "FR"},
+
+    # ── ITALY (Southern Europe Tech & Astronomy) ────────────────
+    "IT-RM": {"name": "Rome (Central)",     "lat": 41.90, "lon":  12.49, "tz": "Europe/Rome", "country": "IT"},
+    "IT-MI": {"name": "Milan (North)",      "lat": 45.46, "lon":   9.19, "tz": "Europe/Rome", "country": "IT"},
+    "IT-NA": {"name": "Naples (South)",     "lat": 40.85, "lon":  14.26, "tz": "Europe/Rome", "country": "IT"},
+
+    # ── SPAIN (Iberian Peninsula) ───────────────────────────────
+    "ES-MD": {"name": "Madrid (Central)",   "lat": 40.41, "lon":  -3.70, "tz": "Europe/Madrid", "country": "ES"},
+    "ES-BA": {"name": "Barcelona (East)",   "lat": 41.38, "lon":   2.16, "tz": "Europe/Madrid", "country": "ES"},
+    "ES-SE": {"name": "Seville (South)",    "lat": 37.38, "lon":  -5.98, "tz": "Europe/Madrid", "country": "ES"},
+
+    # ── JAPAN (JAXA / High Tech Penetration) ────────────────────
+    "JP-TK": {"name": "Tokyo (East)",       "lat": 35.67, "lon": 139.65, "tz": "Asia/Tokyo", "country": "JP"},
+    "JP-OS": {"name": "Osaka (West)",       "lat": 34.69, "lon": 135.50, "tz": "Asia/Tokyo", "country": "JP"},
+    "JP-SP": {"name": "Sapporo (North)",    "lat": 43.06, "lon": 141.35, "tz": "Asia/Tokyo", "country": "JP"},
+
+    # ── SOUTH KOREA (KARI / Ultra-Connected) ────────────────────
+    "KR-SE": {"name": "Seoul (North)",      "lat": 37.56, "lon": 126.97, "tz": "Asia/Seoul", "country": "KR"},
+    "KR-BU": {"name": "Busan (South)",      "lat": 35.17, "lon": 129.07, "tz": "Asia/Seoul", "country": "KR"},
+
+    # ── BRAZIL (Massive South American Market) ──────────────────
+    "BR-SP": {"name": "São Paulo (South)",  "lat": -23.55,"lon": -46.63, "tz": "America/Sao_Paulo", "country": "BR"},
+    "BR-RJ": {"name": "Rio de Janeiro (East)","lat": -22.90,"lon": -43.20, "tz": "America/Sao_Paulo", "country": "BR"},
+    "BR-MA": {"name": "Manaus (Amazon/North)","lat":  -3.11,"lon": -60.02, "tz": "America/Manaus", "country": "BR"},
+
+    
     # ── AUSTRALIA ───────────────────────────────────────────
     "AU-NSW":{"name":"New South Wales (Sydney)","lat":-33.87,"lon":151.21,"tz":"Australia/Sydney","country":"AU"},
     "AU-VIC":{"name":"Victoria (Melbourne)",    "lat":-37.81,"lon":144.96,"tz":"Australia/Melbourne","country":"AU"},
