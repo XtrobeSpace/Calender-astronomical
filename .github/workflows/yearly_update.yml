@@ -1,0 +1,67 @@
+name: Yearly Static Event Generator
+
+on:
+  schedule:
+    - cron: '7 22 24 6,12 *'  # 22:07 UTC on June 24 & Dec 24 = 03:37 AM IST on June 25 & Dec 25 (spaced 31m)
+  workflow_dispatch:          # Allows manual trigger anytime
+    inputs:
+      year:
+        description: 'Target year to generate (e.g. 2026)'
+        required: false
+        default: '2026'
+
+permissions:
+  contents: write
+
+jobs:
+  yearly-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Skyfield Ephemeris
+        uses: actions/cache@v4
+        with:
+          path: skyfield_cache/
+          key: skyfield-de440s-${{ hashFiles('shared.py') }}
+          restore-keys: |
+            skyfield-de440s-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install skyfield astronomy-engine requests numpy
+
+      - name: Run yearly static generator
+        run: |
+          # If month is December, prepare for upcoming year; otherwise current year
+          MONTH=$(date +%m)
+          YEAR=$(date +%Y)
+          if [ "$MONTH" -eq 12 ]; then
+            TARGET_YEAR=$((YEAR + 1))
+          else
+            TARGET_YEAR=$YEAR
+          fi
+          
+          # Override if manually specified via workflow_dispatch
+          if [ -n "${{ github.event.inputs.year }}" ]; then
+            TARGET_YEAR="${{ github.event.inputs.year }}"
+          fi
+
+          echo "Target Year for yearly generator: $TARGET_YEAR"
+          python generate_yearly.py --year $TARGET_YEAR
+
+      - name: Commit and push yearly_events.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/yearly_events.json
+          git diff-index --quiet HEAD || git commit -m "Auto-generate yearly_events.json [skip ci]"
+          git push

@@ -1,0 +1,6 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Large Binary Ephemeris Files (Skyfield actions/cache downloads this automatically)
+skyfield_cache/*.bsp
