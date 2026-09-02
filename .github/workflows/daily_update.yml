@@ -34,15 +34,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install skyfield astronomy-engine requests numpy
+          pip install skyfield astronomy-engine requests numpy pandas
 
       - name: Run fast daily dynamic sync
         run: |
-          # Automatic retry with exponential backoff on network issues
-          for i in 1 2 3; do
-            echo "Attempt $i to execute generate_daily.py..."
-            python generate_daily.py && break || sleep $((i * 10))
-          done
+          python generate_daily.py
 
       - name: Commit and push updated daily_events.json
         run: |
